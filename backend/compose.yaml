@@ -7,6 +7,7 @@ services:
     environment:
       SMART_STICKY_ENV: development
       SMART_STICKY_ALLOWED_HOSTS: localhost,127.0.0.1
+      SMART_STICKY_DATABASE_URL: ${SMART_STICKY_DEV_DATABASE_URL:?Set PostgreSQL URL using database host and URL-encoded credentials}
     depends_on:
       database:
         condition: service_healthy

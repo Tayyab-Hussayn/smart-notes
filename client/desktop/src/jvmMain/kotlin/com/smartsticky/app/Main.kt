@@ -9,25 +9,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import com.smartsticky.database.NotesDatabase
 import com.smartsticky.notes.*
 import com.smartsticky.canvas.*
-import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import java.awt.FileDialog
+import java.awt.Frame
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 fun main() = application {
-    Window(onCloseRequest = ::exitApplication, title = "Smart Notes") {
-        MaterialTheme { App() }
+    var closeRequested by remember { mutableStateOf(false) }
+    Window(onCloseRequest = { closeRequested = true }, title = "Smart Notes") {
+        MaterialTheme { App(closeRequested, { closeRequested = false }, ::exitApplication) }
     }
 }
 
 @Composable
-private fun App() {
+private fun App(closeRequested: Boolean, cancelClose: () -> Unit, exit: () -> Unit) {
+    var workspace by remember { mutableStateOf<LocalWorkspace?>(null) }
     var repository by remember { mutableStateOf<NoteRepository?>(null) }
     var canvasRepository by remember { mutableStateOf<CanvasRepository?>(null) }
     var placements by remember { mutableStateOf(emptyList<CanvasPlacement>()) }
@@ -42,43 +45,26 @@ private fun App() {
     var deleteCandidate by remember { mutableStateOf<Note?>(null) }
     var pendingEditor by remember { mutableStateOf<Note?>(null) }
     var confirmDiscard by remember { mutableStateOf(false) }
+    var reminderNote by remember { mutableStateOf<Note?>(null) }
     val dirty = draft != (editing?.content ?: "")
     val account = "local-default"
+    DisposableEffect(workspace) {
+        val opened = workspace
+        onDispose { opened?.close() }
+    }
     LaunchedEffect(Unit) {
         try {
-            repository = withContext(Dispatchers.IO) {
-                val directory = Path.of(System.getProperty("user.home"), ".smart-notes")
-                Files.createDirectories(directory)
-                val path = directory.resolve("notes.db")
-                val driver = JdbcSqliteDriver("jdbc:sqlite:$path")
-                // Schema initialization is atomic; never swallow a DB failure.
-                driver.execute(null, "BEGIN IMMEDIATE", 0)
-                try {
-                    val version = driver.executeQuery(null, "PRAGMA user_version", { cursor ->
-                        cursor.next()
-                        app.cash.sqldelight.db.QueryResult.Value(cursor.getLong(0)!!)
-                    }, 0).value
-                    val currentVersion = NotesDatabase.Schema.version
-                    check(version <= currentVersion) { "Unsupported database version" }
-                    if (version == 0L) {
-                        NotesDatabase.Schema.create(driver)
-                    } else if (version < currentVersion) {
-                        NotesDatabase.Schema.migrate(driver, version, currentVersion)
-                    }
-                    driver.execute(null, "PRAGMA user_version = $currentVersion", 0)
-                    driver.execute(null, "COMMIT", 0)
-                } catch (failure: Exception) {
-                    driver.execute(null, "ROLLBACK", 0)
-                    driver.close()
-                    throw failure
-                }
-                val database = NotesDatabase(driver)
-                canvasRepository = SqlCanvasRepository(database)
-                SqlNoteRepository(database)
+            workspace = withContext(Dispatchers.IO) {
+                LocalWorkspace.open(Path.of(System.getProperty("user.home"), ".smart-notes"))
             }
+            repository = workspace!!.notes
+            canvasRepository = workspace!!.canvas
             notes = withContext(Dispatchers.IO) { repository!!.list(account) }
             placements = withContext(Dispatchers.IO) { canvasRepository!!.list(account, "main") }
         } catch (_: Exception) { error = "Cannot open notes safely. Your data has not been reset." }
+    }
+    LaunchedEffect(closeRequested, busy, dirty, workspace, error) {
+        if (closeRequested && !busy && !dirty && reminderNote == null && (workspace != null || error != null)) exit()
     }
     fun changePlacement(action: (CanvasService) -> Unit) {
         val repo = canvasRepository ?: return
@@ -122,6 +108,29 @@ private fun App() {
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Smart Notes", style = MaterialTheme.typography.headlineLarge)
         Text("Local workspace · works offline")
+        TextButton(enabled = !busy && repository != null, onClick = {
+            val dialog = FileDialog(null as Frame?, "Export notes as JSON", FileDialog.SAVE)
+            dialog.file = "smart-notes.json"
+            dialog.isVisible = true
+            val file = dialog.file
+            val directory = dialog.directory
+            dialog.dispose()
+            if (file != null && directory != null) {
+                val target = Path.of(directory, file)
+                busy = true
+                scope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val content = NoteExport.json(account, repository!!.list(account))
+                            // Never overwrite a user's existing file implicitly.
+                            Files.writeString(target, content, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                        }
+                        error = null
+                    } catch (_: Exception) { error = "Export failed. Choose a new filename and try again." }
+                    finally { busy = false }
+                }
+            }
+        }) { Text("Export authored notes") }
         Row {
             FilterChip(selected = !canvasMode, onClick = { canvasMode = false }, label = { Text("Notes") })
             Spacer(Modifier.width(8.dp))
@@ -171,6 +180,8 @@ private fun App() {
                                 else { editing = note; draft = note.content }
                             }) { Text("Edit") }
                             TextButton(enabled = !busy, onClick = { perform { it.pin(note, !note.pinned) } }) { Text("Pin / unpin") }
+                            TextButton(enabled = !busy, onClick = { perform { it.duplicate(note) } }) { Text("Duplicate") }
+                            TextButton(enabled = !busy, onClick = { reminderNote = note }) { Text("Reminders") }
                             TextButton(enabled = !busy, onClick = { perform {
                                 if (note.lifecycle == Lifecycle.ACTIVE) it.archive(note) else it.restore(note)
                             } }) { Text(if (note.lifecycle == Lifecycle.ACTIVE) "Archive" else "Restore") }
@@ -196,5 +207,15 @@ private fun App() {
                 confirmDiscard = false; pendingEditor = null
             }) { Text("Discard changes") } },
             dismissButton = { Button(onClick = { confirmDiscard = false }) { Text("Keep editing") } })
+    }
+    if (closeRequested && dirty && !busy) {
+        AlertDialog(onDismissRequest = cancelClose,
+            title = { Text("Close without saving?") },
+            text = { Text("Your current draft has not been saved.") },
+            confirmButton = { TextButton(onClick = exit) { Text("Discard and close") } },
+            dismissButton = { Button(onClick = cancelClose) { Text("Keep editing") } })
+    }
+    reminderNote?.let { selected ->
+        workspace?.let { ReminderEditor(it.database, selected) { reminderNote = null; cancelClose() } }
     }
 }

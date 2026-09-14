@@ -24,3 +24,21 @@ class HealthTests(unittest.TestCase):
         for path in ("/notes", "/auth/login", "/health/ready", "/docs", "/openapi.json"):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 404)
+
+    def test_auth_required_and_validation_redacts_password(self):
+        self.assertEqual(self.client.get("/v1/sync/changes").status_code, 401)
+        response = self.client.post("/v1/auth/login", json={"email": "invalid", "password": "secret"})
+        self.assertEqual(response.status_code, 422)
+        self.assertNotIn("secret", response.text)
+        self.assertEqual(response.json(), {"code": "invalid_request"})
+
+    def test_large_payload_rejected_before_json_parsing(self):
+        response = self.client.post("/v1/auth/login", content=b"x" * 131073)
+        self.assertEqual(response.status_code, 413)
+
+    def test_auth_rate_limit_backstop(self):
+        for _ in range(10):
+            self.client.post("/v1/auth/login", json={})
+        response = self.client.post("/v1/auth/login", json={})
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers["Retry-After"], "60")

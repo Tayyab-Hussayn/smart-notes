@@ -47,6 +47,7 @@ class NoteService(
     fun duplicate(note: Note): Note = create(note.accountId, note.content)
 
     private fun mutate(note: Note, transform: Note.() -> Note): Note {
+        require(note.revision < Long.MAX_VALUE) { "Note revision exhausted" }
         return note.transform().copy(
             revision = note.revision + 1,
             updatedAt = maxOf(note.updatedAt, now()),

@@ -3,7 +3,10 @@
 Owner direction: conserve Actions usage, batch verification near the integration
 checkpoint, target one initial run and at most one repair run.
 
-- Manual dispatch only; pushes, PRs, and schedules never trigger this workflow.
+- Manual dispatch plus one initial PR-open checkpoint on the implementation branch.
+- Pushes, PR synchronize events, and schedules never trigger this workflow.
+- The connected app does not expose manual workflow dispatch; PR creation provides
+  the authorized first verification run without enabling runs on every push.
 - One standard Linux job, maximum 15 minutes per run.
 - Gradle dependency cache enabled by setup-gradle.
 - No OS matrix, paid larger runners, automatic retries, or scheduled jobs.
