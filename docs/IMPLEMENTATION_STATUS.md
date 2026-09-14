@@ -23,11 +23,16 @@
 - No Kotlin tests executed; no UI launch or native-device verification occurred.
 - Three local SQLite integrity tests and two canvas migration tests passed.
 - Four backend configuration tests passed; two HTTP tests skipped due to absent dependencies.
-- No remote push, deployment, or GitHub Actions run was initiated.
+- Foundation published on `implementation/local-first-foundation` as `fa2cc14`.
+- No deployment or GitHub Actions run was initiated.
 - Manual-only GitHub Actions workflow prepared under `.github/workflows/verify.yml`.
   Owner authorized Actions, with one or two batched checkpoint runs. None dispatched.
 
 ## Remaining
+
+Reminder occurrence/snooze/completion domain and native scheduling boundary added;
+not integrated with storage, recurrence expansion, editor, or native notifications.
+Kotlin tests for this boundary are written but not executed.
 
 Restore authorized Gradle dependency access, compile and repair any compiler errors,
 run tests, generate wrapper, and verify UI behavior. Desktop database driver lifecycle,
