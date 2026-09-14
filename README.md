@@ -81,6 +81,15 @@ Kimi ko ek giant prompt nahi dena. Final stage par:
 2. Ek **`MASTER_KIMI_INSTRUCTIONS.md`** bhi banayenge jo batayegi ke Kimi ko documents **kis order
    mein read karne hain** aur unke against implementation kaise karni hai.
 
-## Status
+## Implementation status
 
-Scaffolding in progress — documentation is placeholder content awaiting authoring.
+The first local-first vertical slice is in progress: shared Kotlin note lifecycle,
+SQLDelight persistence, JVM persistence tests, and an initial Compose Desktop list/editor.
+These sources are **not yet compiled or verified**. No complete app or release is available.
+
+With Gradle 8.14.3 and JDK 17 installed, run
+`gradle :client:shared:jvmTest :client:desktop:compileKotlinJvm`.
+Launch with `gradle :client:desktop:run`. A Gradle wrapper is not yet generated.
+
+Current blocker: the configured build proxy reports `Network is unreachable`,
+preventing Gradle plugin/dependency resolution. See `docs/IMPLEMENTATION_STATUS.md`.

@@ -1,0 +1,15 @@
+.gradle/
+build/
+**/build/
+.idea/
+*.iml
+*.db
+*.db-shm
+*.db-wal
+local.properties
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.env
+.env.*

@@ -1,0 +1,30 @@
+name: Manual integration verification
+
+# Intentionally no push, pull_request, or schedule triggers.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-notes-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.14.3'
+      - name: Compile desktop and test critical persistence invariants
+        run: gradle :client:desktop:compileKotlinJvm :client:shared:jvmTest --no-daemon --max-workers=2 --console=plain
