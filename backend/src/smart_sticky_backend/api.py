@@ -32,6 +32,12 @@ class Note(BaseModel):
     archived: bool = False
 
 
+class DeleteAccount(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    password: str = Field(min_length=12, max_length=128)
+    confirmation: Literal["DELETE MY ACCOUNT"]
+
+
 class Operation(BaseModel):
     model_config = ConfigDict(extra="forbid")
     operation_id: UUID
@@ -72,6 +78,14 @@ def router(database):
                            (token_digest(token), user_id, datetime.now(timezone.utc) + timedelta(minutes=30)))
         return {"access_token": token, "token_type": "bearer", "expires_in": 1800, "user_id": str(user_id)}
 
+    def locked_account(connection, account):
+        # Serialize deletion with reads/writes and recheck credentials after waiting.
+        user = connection.execute("SELECT id,password_hash,revision FROM users WHERE id=%s FOR UPDATE", (account[0],)).fetchone()
+        session = connection.execute("SELECT 1 FROM sessions WHERE token_hash=%s AND user_id=%s AND expires_at>now()", (account[1], account[0])).fetchone()
+        if not user or not session:
+            raise HTTPException(401, "invalid_session")
+        return user
+
     @api.post("/auth/register", status_code=201)
     def register(body: Credentials, response: Response):
         response.headers["Cache-Control"] = "no-store"
@@ -88,7 +102,7 @@ def router(database):
     def login(body: Credentials, response: Response):
         response.headers["Cache-Control"] = "no-store"
         with db().transaction() as connection:
-            user = connection.execute("SELECT id,password_hash FROM users WHERE email=%s", (body.email,)).fetchone()
+            user = connection.execute("SELECT id,password_hash FROM users WHERE email=%s FOR UPDATE", (body.email,)).fetchone()
             valid = verify_password(body.password, user["password_hash"] if user else dummy_hash)
             if not valid or not user:
                 raise HTTPException(401, "invalid_credentials")
@@ -97,12 +111,14 @@ def router(database):
     @api.post("/auth/logout", status_code=204)
     def logout(account=Depends(identity)):
         with db().transaction() as connection:
+            locked_account(connection, account)
             connection.execute("DELETE FROM sessions WHERE token_hash=%s AND user_id=%s", (account[1], account[0]))
 
     @api.post("/auth/renew")
     def renew(response: Response, account=Depends(identity)):
         response.headers["Cache-Control"] = "no-store"
         with db().transaction() as connection:
+            locked_account(connection, account)
             row = connection.execute("DELETE FROM sessions WHERE token_hash=%s AND user_id=%s AND expires_at>now() RETURNING user_id", (account[1], account[0])).fetchone()
             if not row:
                 raise HTTPException(401, "invalid_session")
@@ -112,6 +128,7 @@ def router(database):
     def push(body: Operation, account=Depends(identity)):
         try:
             with db().transaction() as connection:
+                locked_account(connection, account)
                 return apply_operation(connection, account[0], body.model_dump(mode="json"))
         except SyncConflict as conflict:
             raise HTTPException(409, {"code": conflict.code, "current": conflict.current}) from None
@@ -119,9 +136,35 @@ def router(database):
     @api.get("/sync/changes")
     def pull(after: int = Query(default=0, ge=0, le=9223372036854775807), limit: int = Query(default=100, ge=1, le=500), account=Depends(identity)):
         with db().transaction() as connection:
+            locked_account(connection, account)
             rows = connection.execute("SELECT id,revision,deleted,payload FROM notes WHERE user_id=%s AND revision>%s ORDER BY revision LIMIT %s", (account[0], after, limit + 1)).fetchall()
         more = len(rows) > limit
         rows = rows[:limit]
         return {"changes": rows, "cursor": rows[-1]["revision"] if rows else after, "has_more": more}
+
+    @api.get("/account/export")
+    def export(after: UUID | None = None, revision: int | None = Query(default=None, ge=0),
+               limit: int = Query(default=100, ge=1, le=500), account=Depends(identity)):
+        with db().transaction() as connection:
+            user = locked_account(connection, account)
+            # The client restarts if data changes during paginated export.
+            if (after is not None and revision is None) or (revision is not None and revision != user["revision"]):
+                raise HTTPException(409, "export_changed_restart")
+            rows = connection.execute("SELECT id,payload FROM notes WHERE user_id=%s AND NOT deleted AND (%s::uuid IS NULL OR id>%s::uuid) ORDER BY id LIMIT %s",
+                                      (account[0], after, after, limit + 1)).fetchall()
+        more = len(rows) > limit
+        rows = rows[:limit]
+        return {"format": "smart-sticky-notes-v1", "revision": user["revision"], "notes": rows,
+                "next_after": str(rows[-1]["id"]) if more else None, "has_more": more}
+
+    @api.post("/account/delete", status_code=204)
+    def delete_account(body: DeleteAccount, account=Depends(identity)):
+        with db().transaction() as connection:
+            user = locked_account(connection, account)
+            if not verify_password(body.password, user["password_hash"]):
+                raise HTTPException(401, "invalid_credentials")
+            connection.execute("INSERT INTO account_deletions(user_id) VALUES(%s)", (account[0],))
+            # FK cascades remove sessions, notes, and replay receipts atomically.
+            connection.execute("DELETE FROM users WHERE id=%s", (account[0],))
 
     return api

@@ -11,6 +11,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.smartsticky.notes.*
 import com.smartsticky.canvas.*
+import com.smartsticky.sync.*
 import java.nio.file.Path
 import java.util.UUID
 import java.awt.FileDialog
@@ -46,8 +47,12 @@ private fun App(closeRequested: Boolean, cancelClose: () -> Unit, exit: () -> Un
     var pendingEditor by remember { mutableStateOf<Note?>(null) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var reminderNote by remember { mutableStateOf<Note?>(null) }
+    var signIn by remember { mutableStateOf(false) }
+    var client by remember { mutableStateOf<BackendClient?>(null) }
+    var session by remember { mutableStateOf<Session?>(null) }
+    var conflicts by remember { mutableStateOf(emptyList<RemoteNote>()) }
     val dirty = draft != (editing?.content ?: "")
-    val account = "local-default"
+    val account = session?.let { client?.localAccountId(it) } ?: "local-default"
     DisposableEffect(workspace) {
         val opened = workspace
         onDispose { opened?.close() }
@@ -64,7 +69,39 @@ private fun App(closeRequested: Boolean, cancelClose: () -> Unit, exit: () -> Un
         } catch (_: Exception) { error = "Cannot open notes safely. Your data has not been reset." }
     }
     LaunchedEffect(closeRequested, busy, dirty, workspace, error) {
-        if (closeRequested && !busy && !dirty && reminderNote == null && (workspace != null || error != null)) exit()
+        if (closeRequested && !busy && !dirty && reminderNote == null && !signIn && (workspace != null || error != null)) exit()
+    }
+    fun loadAccount(newSession: Session?) {
+        notes = emptyList(); placements = emptyList(); conflicts = emptyList()
+        editing = null; draft = ""; session = newSession
+        busy = true
+        scope.launch {
+            try {
+                val owner = newSession?.let { client!!.localAccountId(it) } ?: "local-default"
+                val loaded = withContext(Dispatchers.IO) { repository!!.list(owner) to canvasRepository!!.list(owner, "main") }
+                notes = loaded.first; placements = loaded.second; error = null
+            } catch (_: Exception) { error = "Cannot load this workspace. Other accounts' content is hidden." }
+            finally { busy = false }
+        }
+    }
+    fun sync(resolve: RemoteNote? = null, keepLocal: Boolean = false) {
+        val authenticated = session ?: return
+        val backend = client ?: return
+        busy = true
+        scope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val engine = SqlSyncEngine(workspace!!.database, backend, System::currentTimeMillis)
+                    val owner = backend.localAccountId(authenticated)
+                    if (resolve != null) engine.resolve(owner, resolve.id, keepLocal) { UUID.randomUUID().toString() }
+                    engine.synchronize(authenticated)
+                    Triple(repository!!.list(owner), canvasRepository!!.list(owner, "main"), engine.conflicts(owner))
+                }
+                notes = result.first; placements = result.second; conflicts = result.third
+                editing = null; error = null
+            } catch (_: Exception) { error = "Sync paused. Local changes are preserved. Check connection or sign in again." }
+            finally { busy = false }
+        }
     }
     fun changePlacement(action: (CanvasService) -> Unit) {
         val repo = canvasRepository ?: return
@@ -107,7 +144,21 @@ private fun App(closeRequested: Boolean, cancelClose: () -> Unit, exit: () -> Un
     }
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Smart Notes", style = MaterialTheme.typography.headlineLarge)
-        Text("Local workspace · works offline")
+        Text(if (session == null) "Local workspace · works offline" else "Account workspace · local edits work offline")
+        Row {
+            TextButton(enabled = !busy && !dirty && workspace != null, onClick = { signIn = true }) { Text("Sign in / switch account") }
+            if (session != null) {
+                TextButton(enabled = !busy && !dirty, onClick = { sync() }) { Text("Sync notes") }
+                TextButton(enabled = !busy && !dirty, onClick = {
+                    val old = session!!
+                    val backend = client
+                    client = null
+                    loadAccount(null)
+                    scope.launch { withContext(Dispatchers.IO) { runCatching { backend?.logout(old.token) } } }
+                }) { Text("Sign out") }
+            }
+        }
+        if (dirty) Text("Save or cancel your draft before switching accounts or syncing.")
         TextButton(enabled = !busy && repository != null, onClick = {
             val dialog = FileDialog(null as Frame?, "Export notes as JSON", FileDialog.SAVE)
             dialog.file = "smart-notes.json"
@@ -217,5 +268,14 @@ private fun App(closeRequested: Boolean, cancelClose: () -> Unit, exit: () -> Un
     }
     reminderNote?.let { selected ->
         workspace?.let { ReminderEditor(it.database, selected) { reminderNote = null; cancelClose() } }
+    }
+    if (signIn) AccountDialog(onDismiss = { signIn = false; cancelClose() }, onSignedIn = { backend, authenticated ->
+        signIn = false; client = backend; loadAccount(authenticated); cancelClose()
+    })
+    conflicts.firstOrNull()?.let { conflict ->
+        AlertDialog(onDismissRequest = { conflicts = emptyList() }, title = { Text("A note changed on another device") },
+            text = { Text("Keep your local text as a new note, or replace it with the server version. Canvas placement and reminders stay with the original note.") },
+            confirmButton = { Button(enabled = !busy, onClick = { sync(conflict, true) }) { Text("Keep my text as a new note") } },
+            dismissButton = { TextButton(enabled = !busy, onClick = { sync(conflict, false) }) { Text("Use server version") } })
     }
 }

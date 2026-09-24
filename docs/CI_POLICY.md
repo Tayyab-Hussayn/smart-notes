@@ -16,7 +16,11 @@ checkpoint, target one initial run and at most one repair run.
 
 ## Run ledger
 
-No runs dispatched by this implementation session.
+1. Initial PR-open run: `34814749042`, commit `02166aa`, draft PR #1.
+   One Linux job; success. Desktop compilation, shared Kotlin tests, SQLite
+   migrations and 13 backend tests including PostgreSQL passed.
+2. Consolidated Android/client-sync/account-lifecycle verification via controlled
+   reopen of draft PR #1. No runs on pushes or ordinary PR updates.
 
 ## Publication
 

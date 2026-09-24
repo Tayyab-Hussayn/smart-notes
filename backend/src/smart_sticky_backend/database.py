@@ -22,10 +22,13 @@ class Database:
             exists = connection.execute("SELECT to_regclass('schema_version') AS table_name").fetchone()
             if exists["table_name"]:
                 version = connection.execute("SELECT max(version) AS version FROM schema_version").fetchone()["version"]
-                if version != 1:
+                if version not in (1, 2):
                     raise RuntimeError("Unsupported schema version")
-                return
-            connection.execute(Path(__file__).with_name("migrations").joinpath("001_initial.sql").read_text())
+            else:
+                connection.execute(Path(__file__).with_name("migrations").joinpath("001_initial.sql").read_text())
+                version = 1
+            if version < 2:
+                connection.execute(Path(__file__).with_name("migrations").joinpath("002_account_deletion.sql").read_text())
 
 
 if __name__ == "__main__":

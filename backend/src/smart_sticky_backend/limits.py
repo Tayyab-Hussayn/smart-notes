@@ -15,7 +15,7 @@ class RequestLimits:
         path = scope.get("path", "")
         if path.startswith("/v1/"):
             now = time.monotonic()
-            auth = path.startswith("/v1/auth/")
+            auth = path.startswith("/v1/auth/") or path == "/v1/account/delete"
             key = ((scope.get("client") or ("unknown",))[0], auth)
             start, count = self.windows.get(key, (now, 0))
             if now - start >= 60:

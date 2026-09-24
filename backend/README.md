@@ -4,7 +4,7 @@ Implemented: validated environment configuration, `GET /health/live`, PostgreSQL
 migration, password login/registration, revocable 30-minute opaque sessions,
 rotation, logout, and authenticated note sync with idempotency and tombstones.
 Liveness reports process responsiveness only; no database readiness is implied.
-Billing, recovery, verified email, account deletion, reminder/canvas replication,
+Billing, recovery, verified email, reminder/canvas replication,
 client HTTP integration, and production security review remain unimplemented.
 
 ## Local run
@@ -42,6 +42,41 @@ and `archived`. Deletion forbids a note payload. Conflict status is 409.
 Changes contain `id`, `revision`, `deleted`, and `payload`. Clients preserve
 conflicting local content and must explicitly resolve conflicts; there is no
 silent last-write-wins behavior. These are foundations, not a full client adapter.
+
+### Account lifecycle
+
+`GET /v1/account/export` exports authenticated authored notes, including archived
+notes but excluding tombstones and all credentials/session metadata. Response:
+`format`, `revision`, `notes` (`id`, `payload`), `next_after`, and `has_more`.
+Use `limit` (1–500, default 100); subsequent pages supply UUID `after` from
+`next_after` and the initial `revision`. A concurrent mutation returns 409
+`export_changed_restart`; discard collected pages and restart to avoid mixing
+snapshots. No export files are saved server-side. This exports synchronized note
+data only, not device-only content or future reminder/canvas aggregates.
+
+`POST /v1/account/delete` requires a valid bearer token and JSON `password` plus
+`confirmation: "DELETE MY ACCOUNT"`. A successful 204 means the PostgreSQL account,
+all sessions, synchronized notes and operation receipts were deleted atomically.
+An audit marker retains only account UUID and deletion timestamp. Incorrect
+passwords leave all state intact. Old sessions cannot sync or recreate that
+account; a later registration receives a new UUID. Clients must stop syncing and
+clear credentials/local account data only after acknowledging successful deletion.
+An authenticated operation already completed before deletion cannot be recalled.
+
+### Mandatory backup restoration guard
+
+The deletion marker is inside PostgreSQL and is **not sufficient on its own**
+when restoring an older backup. Before production launch, operators must maintain
+a durable deletion journal outside the database restore boundary (without notes,
+passwords, or email), reconcile committed `account_deletions` into it, and define
+failure/reconciliation handling. No external journal integration is implemented.
+Keep a restored database isolated from API/sync traffic; reapply all subsequent
+account UUID deletions and session revocations from the authoritative journal,
+verify the account/data/session rows are absent, and only then restore service.
+Journal retention must cover the full backup retention/restore horizon. Backups
+must age out under a documented policy. Production deletion/restore guarantees
+remain blocked until this guard, operational tests, and any future provider data
+cleanup are implemented and verified. Do not claim immediate erasure from backups.
 
 ## Local containers
 
