@@ -1,6 +1,7 @@
 package com.smartsticky.android
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartsticky.notes.*
@@ -9,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
@@ -18,11 +20,14 @@ data class NotesState(val notes: List<Note> = emptyList(), val exposed: Set<Stri
 class NotesViewModel(application: Application) : AndroidViewModel(application) {
     private val lock = Mutex()
     private var workspace: AndroidWorkspace? = null
-    private val mutable = MutableStateFlow(NotesState())
+    private val mutable = MutableStateFlow(NotesState(busy = false))
     val state = mutable.asStateFlow()
     private fun id() = UUID.randomUUID().toString()
     init { refresh() }
-    private fun run(action: (AndroidWorkspace) -> Unit) {
+    private fun run(action: suspend (AndroidWorkspace) -> Unit) {
+        // Reserve the operation before dispatch so rapid taps cannot enqueue duplicate creates.
+        val before = mutable.value
+        if (before.busy || !mutable.compareAndSet(before, before.copy(busy = true, error = null))) return
         viewModelScope.launch(Dispatchers.IO) {
             lock.withLock {
                 mutable.value = mutable.value.copy(busy = true, error = null)
@@ -37,12 +42,20 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun refresh() = run { }
+    fun exportNotes(destination: Uri, onExported: () -> Unit) = run { db ->
+        val snapshot = NoteExport.json(AndroidWorkspace.ACCOUNT, db.notes.list(AndroidWorkspace.ACCOUNT))
+        val resolver = getApplication<Application>().contentResolver
+        val stream = resolver.openOutputStream(destination, "wt")
+            ?: error("Unable to open the export destination.")
+        stream.bufferedWriter(Charsets.UTF_8).use { it.write(snapshot) }
+        withContext(Dispatchers.Main) { onExported() }
+    }
     fun save(note: Note?, content: String, onSaved: (Note) -> Unit) = run { db ->
         require(content.isNotBlank()) { "Write something before saving." }
         require(content.length <= 20_000) { "Please keep notes under 20,000 characters." }
         val service = NoteService(db.notes, ::id, System::currentTimeMillis)
         val saved = if (note == null) service.create(AndroidWorkspace.ACCOUNT, content) else service.edit(note, content)
-        viewModelScope.launch(Dispatchers.Main) { onSaved(saved) }
+        withContext(Dispatchers.Main) { onSaved(saved) }
     }
     fun change(note: Note, action: String) = run { db ->
         val service = NoteService(db.notes, ::id, System::currentTimeMillis)

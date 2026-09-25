@@ -5,6 +5,9 @@ import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,19 +42,34 @@ private fun NotesScreen(model: NotesViewModel = viewModel()) {
     var filter by rememberSaveable { mutableStateOf("ACTIVE") }
     var confirm by remember { mutableStateOf<Note?>(null) }
     var wallpaperError by remember { mutableStateOf<String?>(null) }
+    var exportMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var discardAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val dirty = draft != (editing?.content ?: "")
     val context = LocalContext.current
+    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) model.exportNotes(uri) { exportMessage = "Saved notes exported, including archived and deleted notes." }
+    }
+    fun replaceDraft(note: Note?) {
+        val replace = { editing = note; draft = note?.content ?: "" }
+        if (dirty) discardAction = replace else replace()
+    }
+    BackHandler(enabled = dirty || state.busy) {
+        if (!state.busy) discardAction = { (context as? android.app.Activity)?.finish(); Unit }
+    }
     Surface(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.safeDrawingPadding().imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 Text("Smart Notes", style = MaterialTheme.typography.headlineLarge)
                 Text("Private on this device • no account required")
                 Text("Only notes you explicitly show appear on wallpaper. Wallpaper may also appear on your lock screen; avoid sensitive content.", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth(), label = { Text(if (editing == null) "New note" else "Edit note") }, minLines = 3)
+                OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth(), enabled = !state.busy, label = { Text(if (editing == null) "New note" else "Edit note") }, minLines = 3)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button({ model.save(editing, draft) { editing = it } }, enabled = !state.busy && draft.isNotBlank()) { Text("Save") }
-                    TextButton({ editing = null; draft = "" }, enabled = !state.busy) { Text("New draft") }
+                    TextButton({ replaceDraft(null) }, enabled = !state.busy) { Text("New draft") }
                 }
                 Text("Draft stays here after saving. Tap New draft for another note.", style = MaterialTheme.typography.bodySmall)
+                TextButton({ exportMessage = null; export.launch("smart-notes.json") }, enabled = !state.busy && !dirty) { Text("Export saved notes") }
+                exportMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 Button({
                     runCatching { context.startActivity(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(context, NotesWallpaperService::class.java))) }
                         .onFailure { wallpaperError = "This device cannot open the live wallpaper picker." }
@@ -72,18 +90,24 @@ private fun NotesScreen(model: NotesViewModel = viewModel()) {
                     Column(Modifier.padding(12.dp)) {
                         Text(note.content)
                         Row {
-                            TextButton({ editing = note; draft = note.content }, enabled = !state.busy) { Text("Edit") }
-                            TextButton({ model.change(note, "pin") }, enabled = !state.busy) { Text(if (note.pinned) "Unpin" else "Pin") }
-                            TextButton({ model.change(note, if (note.lifecycle == Lifecycle.ACTIVE) "archive" else "restore") }, enabled = !state.busy) { Text(if (note.lifecycle == Lifecycle.ACTIVE) "Archive" else "Restore") }
+                            TextButton({ replaceDraft(note) }, enabled = !state.busy) { Text("Edit") }
+                            TextButton({ model.change(note, "pin") }, enabled = !state.busy && editing?.id != note.id) { Text(if (note.pinned) "Unpin" else "Pin") }
+                            TextButton({ model.change(note, if (note.lifecycle == Lifecycle.ACTIVE) "archive" else "restore") }, enabled = !state.busy && editing?.id != note.id) { Text(if (note.lifecycle == Lifecycle.ACTIVE) "Archive" else "Restore") }
                         }
                         if (note.lifecycle == Lifecycle.ACTIVE) {
                             Row { Checkbox(note.id in state.exposed, { model.expose(note, it) }, enabled = !state.busy); Text("Show on wallpaper", Modifier.padding(top = 12.dp)) }
                         }
-                        if (note.lifecycle != Lifecycle.DELETED) TextButton({ confirm = note }, enabled = !state.busy) { Text("Move to trash") }
+                        if (note.lifecycle != Lifecycle.DELETED) TextButton({ confirm = note }, enabled = !state.busy && editing?.id != note.id) { Text("Move to trash") }
                     }
                 }
             }
         }
+    }
+    discardAction?.let { action ->
+        AlertDialog(onDismissRequest = { discardAction = null }, title = { Text("Discard unsaved changes?") },
+            text = { Text("Save your note first to keep these changes.") },
+            confirmButton = { TextButton({ discardAction = null; action() }) { Text("Discard") } },
+            dismissButton = { TextButton({ discardAction = null }) { Text("Keep editing") } })
     }
     confirm?.let { note -> AlertDialog(onDismissRequest = { confirm = null }, title = { Text("Move note to trash?") }, text = { Text("You can restore it from the deleted tab.") }, confirmButton = { TextButton({ model.change(note, "delete"); confirm = null }) { Text("Move to trash") } }, dismissButton = { TextButton({ confirm = null }) { Text("Cancel") } }) }
 }

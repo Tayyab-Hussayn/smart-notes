@@ -83,13 +83,19 @@ Kimi ko ek giant prompt nahi dena. Final stage par:
 
 ## Implementation status
 
-The first local-first vertical slice is in progress: shared Kotlin note lifecycle,
-SQLDelight persistence, JVM persistence tests, and an initial Compose Desktop list/editor.
-These sources are **not yet compiled or verified**. No complete app or release is available.
+Development includes shared local persistence, desktop notes/canvas/reminders and
+manual account sync, Android local notes/live wallpaper, and backend account/sync APIs.
+The initial desktop/backend CI verification passed. The second CI run failed during
+Android plugin setup. Local repairs now pass 23 Kotlin tests, desktop compilation
+and Android debug APK assembly; 12 local backend tests pass, with two PostgreSQL
+tests skipped. Device and release verification remain incomplete.
+No complete app or release is available. See [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
-With Gradle 8.14.3 and JDK 17 installed, run
-`gradle :client:shared:jvmTest :client:desktop:compileKotlinJvm`.
-Launch with `gradle :client:desktop:run`. A Gradle wrapper is not yet generated.
+With JDK 17 installed, run
+`./gradlew :client:shared:jvmTest :client:desktop:compileKotlinJvm`.
+Launch with `./gradlew :client:desktop:run` (Windows: `gradlew.bat`).
+The wrapper pins Gradle 8.14.3 and verifies its distribution checksum.
 
-Current blocker: the configured build proxy reports `Network is unreachable`,
-preventing Gradle plugin/dependency resolution. See `docs/IMPLEMENTATION_STATUS.md`.
+With Android SDK 35 installed, build the development APK using
+`./gradlew -PenableAndroid=true :client:android:assembleDebug`.
+Both planned Actions runs have been used; ordinary pushes do not trigger CI.

@@ -1,46 +1,59 @@
-# Implementation checkpoint — 2026-09-13
+# Implementation status — 2026-09-25
 
-## Written, not compiled
+## Implemented on the development branch
 
-- Gradle/KMP/Compose/SQLDelight module configuration.
-- Account-scoped note repository and optimistic local revision checks.
-- Create/edit/archive/restore/delete/pin/duplicate domain operations.
-- Soft-deletion tombstones and atomic immutable outbox snapshots.
-- JVM tests for restart persistence, account-scoped reads, stale-edit rejection,
-  and transaction rollback if outbox insertion fails.
-- Initial desktop list/editor with archive/deleted views and delete confirmation.
-- Canvas persistence, normalized drag/button movement, visibility, and versioned migration.
-- Deterministic surface selection with hard eligibility filters and explanation strings.
-- Backend liveness/configuration/container foundation; no product APIs yet.
+- Shared Kotlin note lifecycle, account-scoped SQLDelight storage, optimistic
+  revisions, tombstones, immutable outboxes and versioned migrations.
+- Canvas placement/visibility and deterministic note selection.
+- Stored reminder schedules, occurrences, snooze/completion and bounded
+  fixed-interval expansion; native notification delivery is not connected.
+- Compose desktop editor, archive/trash, canvas, JSON note export and reminder UI.
+- Desktop sign-in/register, manual note sync and explicit conflict resolution.
+  Sessions remain in memory; local account namespaces include the server origin.
+- HTTP sync with durable retry attempts, server revisions and pull cursors;
+  conflicts retain local edits and can preserve them as a separate note.
+- Android local note editor and opt-in live wallpaper with visible-only rotation.
+  Draft-discard confirmation, synchronous save reservation and system-picker
+  JSON note export added on September 25.
+- FastAPI/PostgreSQL registration, login, session renewal/revocation, revisioned
+  note sync, account export and authenticated account deletion.
 
-## Verification
+## Verification evidence
 
-- `git diff --check` passed.
-- Gradle 8.14.3 downloaded successfully.
-- `:client:shared:jvmTest` failed before compilation: the configured build proxy
-  reported `java.net.SocketException: Network is unreachable` for Google,
-  Maven Central and Gradle Plugin Portal.
-- No Kotlin tests executed; no UI launch or native-device verification occurred.
-- Three local SQLite integrity tests and two canvas migration tests passed.
-- Four backend configuration tests passed; two HTTP tests skipped due to absent dependencies.
-- Foundation published on `implementation/local-first-foundation` as `fa2cc14`.
-- No deployment or GitHub Actions run was initiated.
-- Manual-only GitHub Actions workflow prepared under `.github/workflows/verify.yml`.
-  Owner authorized Actions, with one or two batched checkpoint runs. None dispatched.
+- Actions run `34814749042` on commit `02166aa`: passed desktop compilation,
+  shared Kotlin tests, SQLite checks and 13 backend tests including PostgreSQL.
+- Actions run `36070669269` on commit `e35f803`: failed during Android plugin
+  setup with missing `com/android/build/gradle/api/BaseVariant`. Compilation
+  and subsequent test steps did not execute; no APK was produced.
+- Root Android/Kotlin plugin classpath alignment has been repaired in source.
+  Android plugin setup and AndroidX configuration repaired. September 25 local
+  `:client:android:assembleDebug` succeeded with SDK 35; APK signature verified.
+  Device verification remains pending.
+- Both planned Actions runs have been used. Pushes do not launch further runs.
+- September 25 local checks: seven SQLite tests passed; twelve backend tests
+  passed after installing dependencies, with two PostgreSQL tests skipped.
+  Backend package metadata repaired and editable installation verified.
+- Gradle wrapper generated for 8.14.3 with the published SHA-256 checksum.
+- September 25 local Gradle run passed: 23 Kotlin tests, SQLDelight generation
+  and desktop compilation, including the new sync client. Local build access
+  was restored using the configured proxy, system CA store and a full JDK 17.
+- No native-device, emulator, iOS/Xcode, store or production verification exists.
 
-## Remaining
+Development APK: package `com.smartsticky.android`, version `0.1.0`, min SDK 26,
+target SDK 35. SHA-256:
+`f5ec3d76a1df3820c5790d26bd43b4a5df2ba654683860db76dea5f55a5e42cb`.
+This is a debug-signed local-notes/wallpaper build, not a release candidate.
 
-Reminder occurrence/snooze/completion domain and native scheduling boundary added;
-not integrated with storage, recurrence expansion, editor, or native notifications.
-Kotlin tests for this boundary are written but not executed.
+## Remaining implementation and release work
 
-Restore authorized Gradle dependency access, compile and repair any compiler errors,
-run tests, generate wrapper, and verify UI behavior. Desktop database driver lifecycle,
-draft handling across other actions, and accessible responsive actions need review.
-Add migration fixtures and multi-connection concurrency tests before considering
-the persistence milestone complete.
+- Android account/sync and reminder interfaces; native notification delivery.
+- iOS application and supported native surfaces.
+- Windows/macOS packaging and native adapters; Linux desktop UI verification.
+- Calendar/time-zone recurrence, background work and canvas/reminder replication.
+- Full aggregate export, client account-deletion UI, recovery/verification email
+  and secure persistent credential storage.
+- Consent-controlled cloud AI, verified subscriptions and rewarded ads.
+- External deletion journal, backup-restore reconciliation and production ops.
+- End-to-end, accessibility, security, device lifecycle and release acceptance.
 
-Canvas visual verification, reminders, Android/iOS targets, persistent
-surfaces, backend product APIs, identity, multi-device sync, intelligence integration,
-billing/ads, privacy export/deletion, CI and deployment remain unimplemented.
-The current outbox is local bookkeeping, not an approved sync wire protocol.
+Draft PR #1 is development work, not a finished application or production release.

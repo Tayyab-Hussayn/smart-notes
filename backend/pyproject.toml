@@ -17,6 +17,3 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 smart_sticky_backend = ["migrations/*.sql"]
-
-[tool.setuptools.package-data]
-smart_sticky_backend = ["migrations/*.sql"]

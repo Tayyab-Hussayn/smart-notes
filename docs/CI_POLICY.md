@@ -21,6 +21,11 @@ checkpoint, target one initial run and at most one repair run.
    migrations and 13 backend tests including PostgreSQL passed.
 2. Consolidated Android/client-sync/account-lifecycle verification via controlled
    reopen of draft PR #1. No runs on pushes or ordinary PR updates.
+   Run `36070669269`, commit `e35f803`: failed during Android plugin setup
+   (`BaseVariant` class not visible). No compilation, tests or APK completed.
+   Root plugin classpath and AndroidX repairs verified locally on September 25:
+   23 Kotlin tests, desktop compilation and Android APK assembly passed.
+   Both planned Actions runs used; local builds consume no Actions minutes.
 
 ## Publication
 

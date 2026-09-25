@@ -1,4 +1,8 @@
 plugins {
+    // Keep AGP and Kotlin in the same parent classloader for Android targets.
+    id("com.android.application") apply false
+    id("com.android.library") apply false
+    kotlin("android") apply false
     kotlin("multiplatform") version "2.1.21" apply false
     id("org.jetbrains.compose") version "1.8.2" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.1.21" apply false
