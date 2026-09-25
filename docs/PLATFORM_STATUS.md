@@ -7,7 +7,7 @@ This is implementation status, not an advertised support matrix.
 | Linux desktop | Compose editor and manual account sync | In-app canvas | Not connected | Current desktop compilation and 23 Kotlin tests passed locally; UI not exercised |
 | Windows desktop | Shared desktop source | Not connected | Not connected | No native build |
 | macOS desktop | Shared desktop source | Not connected | Not connected | No native build |
-| Android | Local Compose editor and export | Opt-in live wallpaper | Not connected | SDK 35 debug APK built and signature verified; no device testing |
+| Android | Compose editor, export and manual account sync | Opt-in device-only live wallpaper | Not connected | Account-flow APK assembly and 24 shared tests passed locally; no device/end-to-end testing |
 | iOS | Not implemented | Not implemented | Not implemented | No Xcode/device build |
 
 Capabilities default to unavailable until positively detected by native adapters.

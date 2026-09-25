@@ -77,4 +77,33 @@ class SqlSyncEngineTest {
         assertNotEquals(BackendClient("https://one.example").localAccountId(session),
             BackendClient("https://two.example").localAccountId(session))
     }
+
+    @Test fun syncUploadsOnlyTheAuthenticatedWorkspace() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        try {
+            NotesDatabase.Schema.create(driver)
+            val db = NotesDatabase(driver)
+            val sent = mutableListOf<String>()
+            val client = BackendClient("https://notes.example", transport = BackendTransport { request ->
+                assertEquals("Bearer ${session.token}", request.headers["Authorization"])
+                if (request.method == "GET") BackendResponse(200, """{"changes":[],"cursor":0,"has_more":false}""")
+                else {
+                    val body = Json.parseToJsonElement(request.body!!).jsonObject
+                    sent += body.getValue("note").jsonObject.getValue("body").jsonPrimitive.content
+                    BackendResponse(200, """{"operation_id":${body["operation_id"]},"note_id":${body["note_id"]},"revision":1,"deleted":false}""")
+                }
+            })
+            val owner = client.localAccountId(session)
+            val other = client.localAccountId(Session(UUID.randomUUID().toString(), "b".repeat(32), 1800))
+            val service = NoteService(SqlNoteRepository(db), { UUID.randomUUID().toString() }, { 100 })
+            service.create(owner, "owner note")
+            service.create(other, "other account private note")
+            service.create("local", "device-only private note")
+            assertEquals(1, SqlSyncEngine(db, client) { 101 }.synchronize(session).uploaded)
+            assertEquals(listOf("owner note"), sent)
+            assertEquals(1L, db.notesQueries.pendingCount(other).executeAsOne())
+            assertEquals(1L, db.notesQueries.pendingCount("local").executeAsOne())
+            assertEquals(0L, db.notesQueries.pendingCount(owner).executeAsOne())
+        } finally { driver.close() }
+    }
 }

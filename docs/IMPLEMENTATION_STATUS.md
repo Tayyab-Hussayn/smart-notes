@@ -1,4 +1,4 @@
-# Implementation status — 2026-09-25
+# Implementation status — 2026-09-26
 
 ## Implemented on the development branch
 
@@ -15,6 +15,11 @@
 - Android local note editor and opt-in live wallpaper with visible-only rotation.
   Draft-discard confirmation, synchronous save reservation and system-picker
   JSON note export added on September 25.
+- Android HTTPS sign-in/registration, account-scoped manual note sync, reauthentication,
+  local/server conflict previews and explicit resolution. Session credentials stay
+  in memory; restarting returns to device-only notes. Drafts and exports are scoped
+  to the current account. Wallpaper continues to use explicitly exposed device-only
+  notes; account notes cannot be exposed on wallpaper in this slice.
 - FastAPI/PostgreSQL registration, login, session renewal/revocation, revisioned
   note sync, account export and authenticated account deletion.
 
@@ -38,15 +43,20 @@
   and desktop compilation, including the new sync client. Local build access
   was restored using the configured proxy, system CA store and a full JDK 17.
 - No native-device, emulator, iOS/Xcode, store or production verification exists.
+- September 26 local verification: 24 Kotlin tests passed (including the new
+  account/device-only upload-isolation regression); Android debug APK assembly
+  passed with the account, sync and conflict-review screens. No extra Actions run.
+  A deployed-server/mobile end-to-end test has not been performed.
 
-Development APK: package `com.smartsticky.android`, version `0.1.0`, min SDK 26,
+September 25 development APK: package `com.smartsticky.android`, version `0.1.0`, min SDK 26,
 target SDK 35. SHA-256:
 `f5ec3d76a1df3820c5790d26bd43b4a5df2ba654683860db76dea5f55a5e42cb`.
 This is a debug-signed local-notes/wallpaper build, not a release candidate.
 
 ## Remaining implementation and release work
 
-- Android account/sync and reminder interfaces; native notification delivery.
+- Android account-flow device testing, account wallpaper and reminder interfaces;
+  native notification delivery.
 - iOS application and supported native surfaces.
 - Windows/macOS packaging and native adapters; Linux desktop UI verification.
 - Calendar/time-zone recurrence, background work and canvas/reminder replication.
