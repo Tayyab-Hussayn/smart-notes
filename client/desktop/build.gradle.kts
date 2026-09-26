@@ -6,6 +6,7 @@ plugins {
 kotlin {
     jvm()
     sourceSets {
+        jvmTest.dependencies { implementation(kotlin("test")) }
         jvmMain.dependencies {
             implementation(project(":client:shared"))
             implementation(compose.desktop.currentOs)

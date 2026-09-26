@@ -45,7 +45,7 @@ jobs:
         with:
           gradle-version: '8.14.3'
       - name: Compile desktop and test critical persistence invariants
-        run: gradle -PenableAndroid=true :client:desktop:compileKotlinJvm :client:shared:jvmTest :client:android:assembleDebug --no-daemon --max-workers=2 --console=plain
+        run: gradle -PenableAndroid=true :client:desktop:jvmTest :client:shared:jvmTest :client:android:assembleDebug --no-daemon --max-workers=2 --console=plain
       - name: Local schema and migration checks
         run: |
           python scripts/test_sql_integrity.py

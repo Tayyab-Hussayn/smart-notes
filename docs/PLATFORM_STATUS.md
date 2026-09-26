@@ -4,7 +4,7 @@ This is implementation status, not an advertised support matrix.
 
 | Target | App shell | Persistent surface | Native reminders | Verified |
 |---|---|---|---|---|
-| Linux desktop | Compose editor and manual account sync | In-app canvas | Not connected | Current desktop compilation and 23 Kotlin tests passed locally; UI not exercised |
+| Linux desktop | Compose editor and manual account sync | In-app canvas | Not connected | Desktop compilation, 4 startup acceptance tests and 29 shared tests pass; UI not exercised |
 | Windows desktop | Shared desktop source | Not connected | Not connected | No native build |
 | macOS desktop | Shared desktop source | Not connected | Not connected | No native build |
 | Android | Compose editor, export, manual account sync and in-app one-time reminders | Opt-in device-only live wallpaper | Not connected | Reminder-flow APK assembly and 29 shared tests passed locally; no device/end-to-end testing |

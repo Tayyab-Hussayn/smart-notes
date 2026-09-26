@@ -21,8 +21,8 @@ class LocalWorkspace private constructor(private val driver: JdbcSqliteDriver) :
             try {
                 driver.execute(null, "PRAGMA foreign_keys = ON", 0)
                 driver.execute(null, "PRAGMA busy_timeout = 5000", 0)
-                driver.execute(null, "BEGIN IMMEDIATE", 0)
-                try {
+                // Use the same transaction owner as generated schema creation/migration.
+                NotesDatabase(driver).transaction {
                     val version = driver.executeQuery(null, "PRAGMA user_version", { cursor ->
                         check(cursor.next().value)
                         QueryResult.Value(requireNotNull(cursor.getLong(0)))
@@ -32,10 +32,6 @@ class LocalWorkspace private constructor(private val driver: JdbcSqliteDriver) :
                     if (version == 0L) NotesDatabase.Schema.create(driver)
                     else if (version < current) NotesDatabase.Schema.migrate(driver, version, current)
                     driver.execute(null, "PRAGMA user_version = $current", 0)
-                    driver.execute(null, "COMMIT", 0)
-                } catch (failure: Exception) {
-                    runCatching { driver.execute(null, "ROLLBACK", 0) }
-                    throw failure
                 }
                 return LocalWorkspace(driver)
             } catch (failure: Exception) {

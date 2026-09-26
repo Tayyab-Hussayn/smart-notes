@@ -76,3 +76,10 @@ Draft PR #1 is development work, not a finished application or production releas
 Latest reminder verification (September 26): 29 shared Kotlin tests passed with
 zero failures or skips; Android debug APK assembly passed locally. No additional
 Actions run. Native notification delivery and device testing remain pending.
+
+First-milestone hardening (September 26): fixed desktop fresh-database startup
+by using SQLDelight transaction ownership. Four desktop acceptance tests pass,
+covering lifecycle/canvas restart persistence, v1 upgrades, unsupported schemas
+and rollback after failed initialization. The 29 shared tests and seven SQLite
+checks pass. Interactive desktop verification remains pending; see
+[FIRST_MILESTONE_ACCEPTANCE.md](FIRST_MILESTONE_ACCEPTANCE.md).
