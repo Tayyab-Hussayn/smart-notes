@@ -1,0 +1,39 @@
+CREATE TABLE canvas_placement (
+    account_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    surface_id TEXT NOT NULL,
+    x REAL NOT NULL CHECK(x >= 0 AND x <= 1 - width),
+    y REAL NOT NULL CHECK(y >= 0 AND y <= 1 - height),
+    width REAL NOT NULL CHECK(width > 0 AND width <= 1),
+    height REAL NOT NULL CHECK(height > 0 AND height <= 1),
+    z_order INTEGER NOT NULL,
+    opacity REAL NOT NULL CHECK(opacity >= 0 AND opacity <= 1),
+    visible INTEGER NOT NULL CHECK(visible IN (0, 1)),
+    appearance TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK(revision > 0),
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(account_id, id),
+    UNIQUE(account_id, note_id, surface_id),
+    FOREIGN KEY(account_id, note_id) REFERENCES note(account_id, id)
+);
+
+CREATE INDEX canvas_surface ON canvas_placement(account_id, surface_id, z_order);
+
+CREATE TABLE canvas_outbox (
+    operation_id TEXT NOT NULL PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    placement_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    surface_id TEXT NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    width REAL NOT NULL,
+    height REAL NOT NULL,
+    z_order INTEGER NOT NULL,
+    opacity REAL NOT NULL,
+    visible INTEGER NOT NULL,
+    appearance TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);

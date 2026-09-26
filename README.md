@@ -81,6 +81,21 @@ Kimi ko ek giant prompt nahi dena. Final stage par:
 2. Ek **`MASTER_KIMI_INSTRUCTIONS.md`** bhi banayenge jo batayegi ke Kimi ko documents **kis order
    mein read karne hain** aur unke against implementation kaise karni hai.
 
-## Status
+## Implementation status
 
-Scaffolding in progress — documentation is placeholder content awaiting authoring.
+Development includes shared local persistence, desktop notes/canvas/reminders and
+manual account sync, Android local notes/live wallpaper, and backend account/sync APIs.
+The initial desktop/backend CI verification passed. The second CI run failed during
+Android plugin setup. Local verification now covers 29 shared Kotlin tests, desktop startup acceptance
+tests, desktop compilation and Android debug APK assembly; 12 local backend tests pass, with two PostgreSQL
+tests skipped. Device and release verification remain incomplete.
+No complete app or release is available. See [implementation status](docs/IMPLEMENTATION_STATUS.md).
+
+With JDK 17 installed, run
+`./gradlew :client:shared:jvmTest :client:desktop:jvmTest`.
+Launch with `./gradlew :client:desktop:run` (Windows: `gradlew.bat`).
+The wrapper pins Gradle 8.14.3 and verifies its distribution checksum.
+
+With Android SDK 35 installed, build the development APK using
+`./gradlew -PenableAndroid=true :client:android:assembleDebug`.
+Both planned Actions runs have been used; ordinary pushes do not trigger CI.

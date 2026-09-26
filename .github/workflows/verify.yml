@@ -1,0 +1,69 @@
+name: Manual integration verification
+
+# One initial checkpoint on PR creation; subsequent pushes do not trigger runs.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-notes-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'implementation/local-first-foundation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: smart_notes_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test_user -d smart_notes_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.14.3'
+      - name: Compile desktop and test critical persistence invariants
+        run: gradle -PenableAndroid=true :client:desktop:jvmTest :client:shared:jvmTest :client:android:assembleDebug --no-daemon --max-workers=2 --console=plain
+      - name: Local schema and migration checks
+        run: |
+          python scripts/test_sql_integrity.py
+          python scripts/test_canvas_migration.py
+          python scripts/test_reminder_migration.py
+          python scripts/test_sync_migration.py
+      - name: Backend tests against disposable PostgreSQL
+        env:
+          SMART_STICKY_DATABASE_URL: postgresql://test_user:disposable_ci_only@localhost:5432/smart_notes_test
+          SMART_STICKY_TEST_DATABASE_URL: postgresql://test_user:disposable_ci_only@localhost:5432/smart_notes_test
+        run: |
+          python -m pip install -e 'backend[test]'
+          python -m smart_sticky_backend.database
+          python -m unittest discover -s backend/tests -v
+      - name: Save development APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-notes-android-debug
+          path: client/android/build/outputs/apk/debug/*.apk
+          retention-days: 7
+          if-no-files-found: error

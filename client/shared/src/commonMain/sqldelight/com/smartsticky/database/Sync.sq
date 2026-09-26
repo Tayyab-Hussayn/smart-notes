@@ -1,0 +1,74 @@
+CREATE TABLE sync_note (
+    account_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    server_revision INTEGER NOT NULL,
+    remote_title TEXT NOT NULL DEFAULT '',
+    remote_priority TEXT NOT NULL DEFAULT 'normal',
+    PRIMARY KEY(account_id, note_id)
+);
+
+CREATE TABLE sync_cursor (
+    account_id TEXT NOT NULL PRIMARY KEY,
+    cursor INTEGER NOT NULL
+);
+
+CREATE TABLE sync_attempt (
+    account_id TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    base_revision INTEGER NOT NULL,
+    remote_title TEXT NOT NULL,
+    remote_priority TEXT NOT NULL,
+    PRIMARY KEY(account_id, operation_id)
+);
+
+CREATE TABLE sync_conflict (
+    account_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    remote_json TEXT NOT NULL,
+    PRIMARY KEY(account_id, note_id)
+);
+
+pending:
+SELECT * FROM outbox WHERE account_id = ? ORDER BY created_at, note_id, revision;
+
+pendingForNote:
+SELECT count(*) FROM outbox WHERE account_id = ? AND note_id = ?;
+
+deleteOperation:
+DELETE FROM outbox WHERE account_id = ? AND operation_id = ?;
+
+deleteNoteOperations:
+DELETE FROM outbox WHERE account_id = ? AND note_id = ?;
+
+metadata:
+SELECT * FROM sync_note WHERE account_id = ? AND note_id = ?;
+
+putMetadata:
+INSERT OR REPLACE INTO sync_note VALUES (?, ?, ?, ?, ?);
+
+cursor:
+SELECT cursor FROM sync_cursor WHERE account_id = ?;
+
+putCursor:
+INSERT OR REPLACE INTO sync_cursor VALUES (?, ?);
+
+attempt:
+SELECT * FROM sync_attempt WHERE account_id = ? AND operation_id = ?;
+
+putAttempt:
+INSERT INTO sync_attempt VALUES (?, ?, ?, ?, ?);
+
+deleteAttempt:
+DELETE FROM sync_attempt WHERE account_id = ? AND operation_id = ?;
+
+clearAttempts:
+DELETE FROM sync_attempt WHERE account_id = ?;
+
+putConflict:
+INSERT OR REPLACE INTO sync_conflict VALUES (?, ?, ?);
+
+conflicts:
+SELECT * FROM sync_conflict WHERE account_id = ?;
+
+deleteConflict:
+DELETE FROM sync_conflict WHERE account_id = ? AND note_id = ?;

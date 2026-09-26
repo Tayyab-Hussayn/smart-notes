@@ -1,0 +1,42 @@
+CREATE TABLE reminder_schedule (
+ account_id TEXT NOT NULL,
+ id TEXT NOT NULL,
+ note_id TEXT NOT NULL,
+ first_at INTEGER NOT NULL,
+ interval_ms INTEGER CHECK(interval_ms > 0),
+ enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ updated_at INTEGER NOT NULL,
+ PRIMARY KEY(account_id,id),
+ UNIQUE(account_id,id,note_id),
+ FOREIGN KEY(account_id,note_id) REFERENCES note(account_id,id)
+);
+CREATE TABLE reminder_occurrence (
+ account_id TEXT NOT NULL,
+ schedule_id TEXT NOT NULL,
+ scheduled_at INTEGER NOT NULL,
+ note_id TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('PENDING','COMPLETED','CANCELLED')),
+ snoozed_until INTEGER CHECK(snoozed_until >= scheduled_at),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ updated_at INTEGER NOT NULL,
+ PRIMARY KEY(account_id,schedule_id,scheduled_at),
+ CHECK(state = 'PENDING' OR snoozed_until IS NULL),
+ FOREIGN KEY(account_id,schedule_id,note_id) REFERENCES reminder_schedule(account_id,id,note_id)
+);
+CREATE INDEX reminder_due ON reminder_occurrence(account_id,state,scheduled_at);
+CREATE TABLE reminder_outbox (
+ operation_id TEXT NOT NULL PRIMARY KEY,
+ account_id TEXT NOT NULL,
+ schedule_id TEXT NOT NULL,
+ scheduled_at INTEGER,
+ note_id TEXT NOT NULL,
+ first_at INTEGER,
+ interval_ms INTEGER,
+ enabled INTEGER,
+ state TEXT,
+ snoozed_until INTEGER,
+ revision INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL
+);
+

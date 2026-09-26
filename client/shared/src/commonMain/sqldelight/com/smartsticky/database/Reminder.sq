@@ -1,0 +1,70 @@
+CREATE TABLE reminder_schedule (
+ account_id TEXT NOT NULL,
+ id TEXT NOT NULL,
+ note_id TEXT NOT NULL,
+ first_at INTEGER NOT NULL,
+ interval_ms INTEGER CHECK(interval_ms > 0),
+ enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ updated_at INTEGER NOT NULL,
+ PRIMARY KEY(account_id,id),
+ UNIQUE(account_id,id,note_id),
+ FOREIGN KEY(account_id,note_id) REFERENCES note(account_id,id)
+);
+CREATE TABLE reminder_occurrence (
+ account_id TEXT NOT NULL,
+ schedule_id TEXT NOT NULL,
+ scheduled_at INTEGER NOT NULL,
+ note_id TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('PENDING','COMPLETED','CANCELLED')),
+ snoozed_until INTEGER CHECK(snoozed_until >= scheduled_at),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ updated_at INTEGER NOT NULL,
+ PRIMARY KEY(account_id,schedule_id,scheduled_at),
+ CHECK(state = 'PENDING' OR snoozed_until IS NULL),
+ FOREIGN KEY(account_id,schedule_id,note_id) REFERENCES reminder_schedule(account_id,id,note_id)
+);
+CREATE INDEX reminder_due ON reminder_occurrence(account_id,state,scheduled_at);
+CREATE TABLE reminder_outbox (
+ operation_id TEXT NOT NULL PRIMARY KEY,
+ account_id TEXT NOT NULL,
+ schedule_id TEXT NOT NULL,
+ scheduled_at INTEGER,
+ note_id TEXT NOT NULL,
+ first_at INTEGER,
+ interval_ms INTEGER,
+ enabled INTEGER,
+ state TEXT,
+ snoozed_until INTEGER,
+ revision INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL
+);
+
+findSchedule:
+SELECT * FROM reminder_schedule WHERE account_id = ? AND id = ?;
+listSchedules:
+SELECT * FROM reminder_schedule WHERE account_id = ? ORDER BY id;
+insertSchedule:
+INSERT INTO reminder_schedule VALUES (?,?,?,?,?,?,?,?);
+updateSchedule:
+UPDATE reminder_schedule SET first_at = ?, interval_ms = ?, enabled = ?, revision = ?, updated_at = ? WHERE account_id = ? AND id = ?;
+findOccurrence:
+SELECT * FROM reminder_occurrence WHERE account_id = ? AND schedule_id = ? AND scheduled_at = ?;
+insertOccurrence:
+INSERT INTO reminder_occurrence VALUES (?,?,?,?,?,?,?,?);
+updateOccurrence:
+UPDATE reminder_occurrence SET state = ?, snoozed_until = ?, revision = ?, updated_at = ? WHERE account_id = ? AND schedule_id = ? AND scheduled_at = ?;
+listOccurrences:
+SELECT * FROM reminder_occurrence WHERE account_id = ? AND schedule_id = ? ORDER BY scheduled_at;
+dueOccurrences:
+SELECT reminder_occurrence.* FROM reminder_occurrence
+JOIN reminder_schedule ON reminder_schedule.account_id = reminder_occurrence.account_id AND reminder_schedule.id = reminder_occurrence.schedule_id
+JOIN note ON note.account_id = reminder_occurrence.account_id AND note.id = reminder_occurrence.note_id
+WHERE reminder_occurrence.account_id = ? AND state = 'PENDING' AND enabled = 1 AND lifecycle = 'ACTIVE'
+AND scheduled_at <= ? AND (snoozed_until IS NULL OR snoozed_until <= ?)
+ORDER BY scheduled_at, schedule_id;
+enqueueReminder:
+INSERT INTO reminder_outbox VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
+pendingReminders:
+SELECT * FROM reminder_outbox WHERE account_id = ? ORDER BY updated_at,revision,operation_id;
+

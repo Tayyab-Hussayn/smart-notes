@@ -1,0 +1,42 @@
+CREATE TABLE note (
+    account_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    revision INTEGER NOT NULL CHECK(revision > 0),
+    lifecycle TEXT NOT NULL CHECK(lifecycle IN ('ACTIVE', 'ARCHIVED', 'DELETED')),
+    pinned INTEGER NOT NULL CHECK(pinned IN (0, 1)),
+    PRIMARY KEY(account_id, id)
+);
+
+-- Immutable mutation snapshot, not merely a pointer to mutable note state.
+CREATE TABLE outbox (
+    operation_id TEXT NOT NULL PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    lifecycle TEXT NOT NULL,
+    pinned INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+listNotes:
+SELECT * FROM note WHERE account_id = ? ORDER BY updated_at DESC, id;
+
+findNote:
+SELECT * FROM note WHERE account_id = ? AND id = ?;
+
+insertNote:
+INSERT INTO note VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+updateNote:
+UPDATE note SET content = ?, updated_at = ?, revision = ?, lifecycle = ?, pinned = ?
+WHERE account_id = ? AND id = ?;
+
+enqueue:
+INSERT INTO outbox VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+pendingCount:
+SELECT count(*) FROM outbox WHERE account_id = ?;
