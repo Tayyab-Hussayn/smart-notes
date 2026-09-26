@@ -22,6 +22,11 @@
   notes; account notes cannot be exposed on wallpaper in this slice.
 - FastAPI/PostgreSQL registration, login, session renewal/revocation, revisioned
   note sync, account export and authenticated account deletion.
+- Android one-time reminder editor with native date/time pickers, in-app due
+  status, completion, ten-minute snooze and schedule disabling. Shared reminder
+  commands enforce ownership, active-note eligibility, optimistic revisions and
+  atomic schedule/occurrence/outbox writes. Stable form request IDs make retries
+  idempotent, including after the chosen time passes. Notifications remain absent.
 
 ## Verification evidence
 
@@ -55,8 +60,8 @@ This is a debug-signed local-notes/wallpaper build, not a release candidate.
 
 ## Remaining implementation and release work
 
-- Android account-flow device testing, account wallpaper and reminder interfaces;
-  native notification delivery.
+- Android account/reminder device testing, account wallpaper, recurring reminder
+  editing and native notification delivery.
 - iOS application and supported native surfaces.
 - Windows/macOS packaging and native adapters; Linux desktop UI verification.
 - Calendar/time-zone recurrence, background work and canvas/reminder replication.
@@ -67,3 +72,7 @@ This is a debug-signed local-notes/wallpaper build, not a release candidate.
 - End-to-end, accessibility, security, device lifecycle and release acceptance.
 
 Draft PR #1 is development work, not a finished application or production release.
+
+Latest reminder verification (September 26): 29 shared Kotlin tests passed with
+zero failures or skips; Android debug APK assembly passed locally. No additional
+Actions run. Native notification delivery and device testing remain pending.

@@ -6,6 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartsticky.notes.*
 import com.smartsticky.canvas.CanvasService
+import com.smartsticky.reminders.*
+import java.time.LocalDateTime
+import java.time.ZoneId
 import com.smartsticky.sync.BackendClient
 import com.smartsticky.sync.BackendException
 import com.smartsticky.sync.Session
@@ -28,6 +31,8 @@ data class NotesState(
     val email: String? = null,
     val conflicts: Map<String, RemoteNote> = emptyMap(), val message: String? = null,
     val needsAuthentication: Boolean = false,
+    val schedules: List<ReminderSchedule> = emptyList(),
+    val occurrences: List<StoredOccurrence> = emptyList(),
 )
 
 class NotesViewModel(application: Application) : AndroidViewModel(application) {
@@ -42,7 +47,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     val state = mutable.asStateFlow()
     private fun id() = UUID.randomUUID().toString()
     init { refresh() }
-    private fun run(action: suspend (AndroidWorkspace) -> Unit) {
+    private fun run(errorMessage: String? = null, action: suspend (AndroidWorkspace) -> Unit) {
         // Reserve the operation before dispatch so rapid taps cannot enqueue duplicate creates.
         val before = mutable.value
         if (before.busy || !mutable.compareAndSet(before, before.copy(busy = true, error = null))) return
@@ -52,10 +57,13 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     val db = workspace ?: AndroidWorkspace(getApplication()).also { workspace = it }
                     action(db)
+                    val reminders = SqlReminderRepository(db.database)
+                    val schedules = reminders.schedules(account)
                     mutable.value = mutable.value.copy(
                         notes = db.notes.list(account),
                         exposed = if (session == null) db.canvas.list(account, AndroidWorkspace.SURFACE).filter { it.visible }.map { it.noteId }.toSet() else emptySet(),
                         busy = false, account = account, server = server,
+                        schedules = schedules, occurrences = schedules.flatMap { reminders.occurrences(account, it.id) },
                         conflicts = client?.let { SqlSyncEngine(db.database, it, System::currentTimeMillis).conflicts(account).associateBy { note -> note.id } } ?: emptyMap(),
                     )
                 } catch (e: CancellationException) {
@@ -66,8 +74,9 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                         error = if (e.status == 401) "Sign in again to sync. Your saved notes and unsent changes remain on this device."
                             else "The server request failed. Check your connection and account details; saved changes are retained.")
                 } catch (e: Exception) {
-                    mutable.value = mutable.value.copy(busy = false, error = when (e) {
+                    mutable.value = mutable.value.copy(busy = false, error = errorMessage ?: when (e) {
                         is RevisionConflict -> "This note changed. Keep your draft and reopen the saved note before editing."
+                        is ReminderRevisionConflict -> "This reminder changed. Refresh reminders before trying again."
                         is IllegalArgumentException -> "Check the server address, account, and note length (1–20,000 characters)."
                         else -> "Unable to complete the action. Your draft and previously saved notes are retained."
                     })
@@ -76,6 +85,24 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun refresh() = run { }
+    fun addReminder(note: Note, date: String, zoneName: String, requestId: String) = run("Choose an active note and a future, unambiguous local time.") { db ->
+        require(note.accountId == account)
+        val local = LocalDateTime.parse(date)
+        val offsets = ZoneId.of(zoneName).rules.getValidOffsets(local)
+        require(offsets.size == 1) { "Ambiguous or nonexistent local time" }
+        ReminderService(db.database, ::id, System::currentTimeMillis)
+            .createOneShot(account, note.id, local.toInstant(offsets.single()).toEpochMilli(), requestId)
+        mutable.value = mutable.value.copy(message = "Reminder saved on this device. Background notifications are not connected yet.")
+    }
+    fun completeReminder(value: StoredOccurrence) = run("Could not complete the reminder. Refresh and try again.") { db ->
+        ReminderService(db.database, ::id, System::currentTimeMillis).complete(account, value)
+    }
+    fun snoozeReminder(value: StoredOccurrence) = run("Could not snooze the reminder. Refresh and check that the schedule is enabled.") { db ->
+        ReminderService(db.database, ::id, System::currentTimeMillis).snoozeTenMinutes(account, value)
+    }
+    fun disableReminder(value: ReminderSchedule) = run("Could not disable the schedule. Refresh and try again.") { db ->
+        ReminderService(db.database, ::id, System::currentTimeMillis).disable(account, value)
+    }
     fun authenticate(endpoint: String, email: String, password: String, register: Boolean) = run { _ ->
         val candidate = BackendClient(endpoint.trim())
         val authenticated = if (register) candidate.register(email.trim(), password) else candidate.login(email.trim(), password)

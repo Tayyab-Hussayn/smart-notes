@@ -54,6 +54,7 @@ private fun WorkspaceScreen(model: NotesViewModel, state: NotesState) {
     var discardAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var accountDialog by remember { mutableStateOf(false) }
     var conflict by remember { mutableStateOf<Note?>(null) }
+    var reminderNoteId by rememberSaveable { mutableStateOf<String?>(null) }
     var exportAccount by rememberSaveable { mutableStateOf<String?>(null) }
     val dirty = draft != (editing?.content ?: "")
     val context = LocalContext.current
@@ -113,6 +114,7 @@ private fun WorkspaceScreen(model: NotesViewModel, state: NotesState) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Text(note.content)
+                        if (note.lifecycle == Lifecycle.ACTIVE) TextButton({ reminderNoteId = note.id; model.refresh() }, enabled = !state.busy && !dirty) { Text("Reminders") }
                         Row {
                             TextButton({ replaceDraft(note) }, enabled = !state.busy) { Text("Edit") }
                             TextButton({ model.change(note, "pin") }, enabled = !state.busy && editing?.id != note.id) { Text(if (note.pinned) "Unpin" else "Pin") }
@@ -129,6 +131,9 @@ private fun WorkspaceScreen(model: NotesViewModel, state: NotesState) {
         }
     }
     if (accountDialog) AccountDialog(state.server, { accountDialog = false }, model::authenticate)
+    state.notes.firstOrNull { it.id == reminderNoteId && it.lifecycle == Lifecycle.ACTIVE }?.let {
+        ReminderDialog(it, state, model) { reminderNoteId = null }
+    }
     conflict?.let { note ->
         AlertDialog(onDismissRequest = { conflict = null }, title = { Text("Choose how to resolve this note") },
             text = { Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
